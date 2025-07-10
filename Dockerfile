@@ -1,14 +1,27 @@
-# Use the official Eclipse Temurin JDK 17 image as base
-FROM eclipse-temurin:17-jdk
+# Stage 1: Build the app with Maven
+FROM maven:3.8.7-eclipse-temurin-17 AS build
 
-# Set working directory inside the container
 WORKDIR /app
 
-# Copy all files from your repo into the container
-COPY . .
+# Copy only the pom.xml first (for dependency caching)
+COPY pom.xml .
 
-# Find and compile all Java files in current and subdirectories
-RUN find . -name "*.java" > sources.txt && javac @sources.txt
+# Download dependencies (cache this layer)
+RUN mvn dependency:go-offline
 
-# Run your bot starting with the App class
-CMD ["java", "App"]
+# Copy the source code
+COPY src ./src
+
+# Package the app (compile and build the jar)
+RUN mvn clean package
+
+# Stage 2: Run the built jar
+FROM eclipse-temurin:17-jre
+
+WORKDIR /app
+
+# Copy the jar from the build stage
+COPY --from=build /app/target/*.jar ./app.jar
+
+# Run the jar
+CMD ["java", "-jar", "app.jar"]
